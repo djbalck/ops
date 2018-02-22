@@ -1,0 +1,32 @@
+$username="xxxxx"
+$pwd="xxxxx"
+$email_address="xxxx"
+$smtp_server="xxxx.com"
+
+Import-Module Activedirectory
+$alladuser=get-aduser -searchbase "OU=user,OU=xxxx,DC=xxxx,DC=xxxx,DC=xxxx" -Filter 'PasswordNeverExpires -eq "false" -and enabled -eq "true"'| ForEach{$_.SamAccountName}
+foreach($user in $alladuser){
+    $pwdlast_set_day=Get-ADUser $user -Properties * | foreach{$_.passwordlastset}
+    if($pwdlast_set_day -eq $null)
+    {
+        continue
+    }
+
+    $pwdlast_expire_day=($pwdlast_set_day).adddays(180)
+    $now=get-date
+    $expire_day=($pwdlast_expire_day-$now).Days
+    $user_email=Get-ADUser $user -Properties * | foreach{$_.EmailAddress}
+
+    $anonUser = $username
+    $anonPass = ConvertTo-SecureString $pwd -AsPlainText -Force
+    $anonCred = New-Object System.Management.Automation.PSCredential($anonUser, $anonPass)
+    $subject="域密码到期提醒" 
+    $bodyhtml="<body>你好：<p> &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp你的域帐户密码还有 $expire_day 天到期，请尽快更改，否则密码失效后，wifi，inode，各种后台系统将无法登陆!
+                </body>"
+    
+    if($expire_day -lt 15)
+    {
+        Send-MailMessage -To $user_email -Subject $subject -BodyAsHtml $bodyhtml -From $email_address -Credential $anonCred -SmtpServer $smtp_server -Encoding ([System.Text.Encoding]::UTF8)
+        $user+"-"+$now | Out-File -Append D:\scripts\check-user-expire\sendmail-log.txt
+    }
+}
